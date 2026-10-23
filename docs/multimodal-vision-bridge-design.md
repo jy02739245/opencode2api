@@ -29,7 +29,7 @@
 | `internal/app/config.go`、`internal/domain/types.go`、 `internal/modelsdev` | `text_only_models` 是大小写不敏感的前缀匹配，默认为空；纯文本判定由 models.dev `modalities.input` 数据驱动（配置前缀作为补充） | 新配置需要保持同样的运行时重载和配合数据判定的 union 语义 |
 | `internal/app/opencode.go` | Zen 使用 `/zen/v1/chat/completions`，Go 使用 `/zen/go/v1/chat/completions`，并复用请求认证和会话头 | 视觉调用应复用已有上游路由、代理和认证策略，不要另造一个固定 URL 客户端 |
 
-当前请求体读取上限为 10 MiB。视觉桥接不能绕过这个上限；新增的图片大小限制应小于或等于请求体上限，并明确 base64 的膨胀比例。
+当前请求体读取上限默认 64 MiB（`OPENCODE2API_MAX_REQUEST_BODY_MB`）。视觉桥接不能绕过这个上限；新增的图片大小限制应小于或等于请求体上限，并明确 base64 的膨胀比例。
 
 ## 3. 研究结果与参考
 

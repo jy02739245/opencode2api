@@ -807,7 +807,15 @@ func shouldRetryUpstreamStatus(status int) bool {
 const (
 	maxUpstreamRetries = 3
 	max401Retries      = 3
+
+	// largeBodyTransportRetryLimit: 超过该大小的请求体在传输错误后不再
+	// 重试。重传多 MiB payload 很少能自愈，只会把一次失败放大成数倍延迟。
+	largeBodyTransportRetryLimit = 1 << 20
 )
+
+func transportErrorRetryable(bodyBytes int64, attempt int) bool {
+	return attempt+1 < maxUpstreamRetries && bodyBytes <= largeBodyTransportRetryLimit
+}
 
 func maxAttemptsForUpstreamStatus(status int) int {
 	if status == http.StatusUnauthorized {
@@ -915,7 +923,7 @@ func callOpenCodeEndpoint(ctx context.Context, endpointSubpath string, upstreamB
 				statsx.RecordKeyUsage(keyID, 0, truncateKeyErr(err.Error()))
 			}
 			retryReason := "transport_error"
-			canRetry := attempt+1 < maxUpstreamRetries
+			canRetry := transportErrorRetryable(up.ContentLength, attempt)
 			if !canRetry {
 				retryReason = ""
 			}

@@ -6,8 +6,9 @@ import (
 	"net/http"
 )
 
-// systemOneMaxBody 协议计费按 body 走，上限对齐 chat 路径的 10 MiB。
-const systemOneMaxBody = 10 * 1024 * 1024
+// systemOneMaxResponseBody 限制上游响应读取；入站请求上限与 chat 路径共用
+// maxRequestBodyBytes()（默认 64 MiB）。
+const systemOneMaxResponseBody = 10 * 1024 * 1024
 
 // systemoneHandler serves POST /v1/systemone: TypeSafe System One 协议
 // （state + typed questions → structured answers）直通上游
@@ -33,9 +34,8 @@ func systemoneHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	auth := extractUpstreamAuth(r)
 	defer r.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(r.Body, systemOneMaxBody))
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+	body, ok := readRequestBody(w, r, maxRequestBodyBytes())
+	if !ok {
 		return
 	}
 	var bodyMap map[string]any
@@ -67,7 +67,7 @@ func systemoneHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, systemOneMaxBody))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, systemOneMaxResponseBody))
 	if err != nil {
 		http.Error(w, "Failed to read upstream response", http.StatusBadGateway)
 		return

@@ -28,6 +28,19 @@ func upstreamTimeout() time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
+// upstreamResponseHeaderTimeout 返回等待上游响应头的超时。Go 的
+// ResponseHeaderTimeout 覆盖请求体发送完成到响应头到达的等待；免费层处理
+// 数 MB 请求体时首字节经常超过 10s，旧值会把正常请求误判为
+// transport_error。env OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS（默认
+// 120）；<=0 关闭该超时（仍受整体墙钟约束）。
+func upstreamResponseHeaderTimeout() time.Duration {
+	secs := envIntOr("OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS", 120)
+	if secs <= 0 {
+		return 0
+	}
+	return time.Duration(secs) * time.Second
+}
+
 // envIntOr 读取整型环境变量，缺失/非法时返回缺省值。
 func envIntOr(key string, def int) int {
 	v := strings.TrimSpace(os.Getenv(key))
@@ -52,7 +65,7 @@ var httpClient = &http.Client{
 		// TLS 握手超时
 		TLSHandshakeTimeout: 5 * time.Second,
 		// 等待响应头超时（避免上游卡住）
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: upstreamResponseHeaderTimeout(),
 		// 连接池优化：高并发下单 host 需要更多空闲连接
 		MaxIdleConns:        500, // 全局空闲连接池（原 100）
 		MaxIdleConnsPerHost: 100, // 单 host 空闲连接（原 20）
@@ -461,7 +474,7 @@ func buildProxyClient(proxy Socks5Proxy) *http.Client {
 			// TLS 握手超时
 			TLSHandshakeTimeout: 5 * time.Second,
 			// 等待响应头超时
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: upstreamResponseHeaderTimeout(),
 			// 连接池优化：高并发下单 host 需要更多空闲连接
 			MaxIdleConns:        500,
 			MaxIdleConnsPerHost: 100,

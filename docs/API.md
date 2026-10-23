@@ -55,6 +55,10 @@
 
 ## 请求校验
 
+### 请求体上限
+
+所有 JSON `POST` 入口默认接受最大 `64 MiB` 请求体（`OPENCODE2API_MAX_REQUEST_BODY_MB` 可调）。超限直接返回 `413 Request body too large (max 64 MiB)`，不会静默截断后用 `400 Invalid JSON` 掩盖原因。连续截图等大 payload 场景建议按实际上游上下文预算控制图片数量；超过 1 MiB 的请求体在传输错误后不会自动重试。
+
 ### temperature
 
 | 入口 | 合法范围（闭区间） |

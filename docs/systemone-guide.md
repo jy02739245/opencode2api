@@ -21,7 +21,7 @@ client ── POST /v1/systemone ──> opencode2api ── POST /zen/v1/system
 - `state` (`string | object | array`)：原样透传，网关不校验语义。
 - `questions` (object)：`{ 名字: {type, instructions, ...} }`。
   question protocol 的类型细节由上游校验，网关不复制、不转换。
-- Body 上限 `10 MiB`（对齐 chat 路径）。
+- Body 上限默认 `64 MiB`（与 chat 路径共用 `OPENCODE2API_MAX_REQUEST_BODY_MB`；超限返回 `413`）。
 - 免费层指纹重写（补 bash/glob/grep/read 工具 + 强制上游流式那套）只作用于
   `chat/completions` / `messages` / `responses` 三个上游子路径，**不作用于 `systemone`**。
 

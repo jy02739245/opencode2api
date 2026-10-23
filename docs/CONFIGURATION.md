@@ -311,10 +311,14 @@ opencode zen 上游的 base URL 列表。默认（未设置或为空数组）为
 |---|---|---|
 | `OPENCODE2API_SHELL_GRACE_MS` | `5000` | Responses 壳帧宽限窗毫秒数:壳帧后等待产出帧的时长,到期仍只有壳帧按健康慢流放行;`0` 恢复「任意帧即 commit」的旧行为 |
 | `OPENCODE2API_UPSTREAM_TIMEOUT_SECS` | `900` | 上游 http.Client 墙钟超时秒数(Go `Timeout` 覆盖整个响应体流式读取);`<=0` 关闭整体墙钟,交由流中断分支 + 客户端断开兜底 |
+| `OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS` | `120` | 等待上游响应头的超时秒数。免费层处理数 MB 请求体时首字节可能明显超过旧值 10s;`<=0` 关闭该超时（仍受整体墙钟约束）。直连与 SOCKS5 客户端共用 |
+| `OPENCODE2API_MAX_REQUEST_BODY_MB` | `64` | JSON 入站请求体上限（MiB）。超限返回 `413 Request body too large`，不再截断后报 `Invalid JSON`；适用于 Chat / Responses / Messages / count_tokens / systemone |
 | `OPENCODE2API_POOL_PUBLIC` | on | public auth 下免费模型是否交由 `key_pool` 接管(round_robin 分摊每账号输出限额);`off` 回退 public 直连。池整体黑名单级失败时自动回落直连,绝不弄坏原本可用路径 |
 | `OPENCODE2API_FORCE_FREE` | off | 强制所有鉴权模式（包括 keypool）只使用免费额度模型：`/v1/models` 只展示 `-free` 变体（去掉后缀）、上游请求模型名自动加 `-free`，行为等同 public 模式的过滤与改写，但 key 鉴权路径不变。`1`/`true`/`yes`/`on` 启用 |
 
 > 免费档限速说明:opencode.ai 免费层的 Output-token 限速是身份/出口级共享桶,承压窗口内外生波动。网关对 429 退避重试(Retry-After 优先,缺省 1s/2s/3s 递增,cap 5s),并在壳帧宽限窗内对「限速杀死型空流」换 key 重试——把空轮/截断收敛为延迟或明确报错,agent 任务不再无限停摆。
+>
+> 大请求体重试说明:超过 1 MiB 的请求体发生传输错误（连接断开、响应头超时等）后不再自动重试。重传多 MiB payload 很少能自愈，只会把一次失败放大成数倍延迟；上游返回的 429/5xx 重试策略不受影响。
 
 ## 管理面板
 

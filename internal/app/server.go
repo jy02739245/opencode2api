@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/6Kmfi6HP/opencode2api/internal/logging"
@@ -17,6 +18,45 @@ import (
 	"syscall"
 	"time"
 )
+
+const defaultMaxRequestBodyMiB = 64
+
+// maxRequestBodyBytes 返回入站 JSON body 上限。Agent 连续截图时 payload
+// 很容易超过旧的 10 MiB；env OPENCODE2API_MAX_REQUEST_BODY_MB 调整（默认
+// 64）。<=0 回退默认值，避免误配置成完全不可用。
+func maxRequestBodyBytes() int64 {
+	mb := envIntOr("OPENCODE2API_MAX_REQUEST_BODY_MB", defaultMaxRequestBodyMiB)
+	if mb <= 0 {
+		mb = defaultMaxRequestBodyMiB
+	}
+	return int64(mb) * 1024 * 1024
+}
+
+// readRequestBody 读取入站 body，超限时明确返回 413。旧实现用
+// io.LimitReader 静默截断到 10 MiB，超限 JSON 会在后续解析时报
+// "Invalid JSON"，掩盖真实原因。
+func readRequestBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
+	if r.ContentLength > limit {
+		http.Error(w, requestBodyTooLargeMessage(limit), http.StatusRequestEntityTooLarge)
+		return nil, false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, requestBodyTooLargeMessage(limit), http.StatusRequestEntityTooLarge)
+			return nil, false
+		}
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return nil, false
+	}
+	return body, true
+}
+
+func requestBodyTooLargeMessage(limit int64) string {
+	return fmt.Sprintf("Request body too large (max %d MiB)", limit/(1024*1024))
+}
 
 // ======================== Main ========================
 
@@ -251,7 +291,8 @@ func startServer(addr string, mux *http.ServeMux) (*http.Server, net.Listener, e
 }
 
 // readJSONRequestBody enforces POST, extracts upstream auth, and reads the body
-// capped at 10 MiB. On failure it writes the HTTP error and returns ok=false.
+// capped at maxRequestBodyBytes(). On failure it writes the HTTP error and
+// returns ok=false.
 func readJSONRequestBody(w http.ResponseWriter, r *http.Request) (auth UpstreamAuth, body []byte, ok bool) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -259,10 +300,9 @@ func readJSONRequestBody(w http.ResponseWriter, r *http.Request) (auth UpstreamA
 	}
 	defer r.Body.Close()
 	auth = extractUpstreamAuth(r)
-	var err error
-	body, err = io.ReadAll(io.LimitReader(r.Body, 10*1024*1024))
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+	var readOK bool
+	body, readOK = readRequestBody(w, r, maxRequestBodyBytes())
+	if !readOK {
 		return auth, nil, false
 	}
 	// 缓存注入路径从 ctx 读 UpstreamAuth 决定免费层默认行为。

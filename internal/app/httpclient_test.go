@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 保存并替换全局代理状态,结束后恢复。
@@ -270,5 +271,32 @@ func TestNormalizeBaseURLs(t *testing.T) {
 	}
 	if got := normalizeBaseURLs(nil); strings.Join(got, ",") != strings.Join(defaultBaseURLs, ",") {
 		t.Fatalf("empty normalize = %#v, want default", got)
+	}
+}
+
+func TestUpstreamResponseHeaderTimeoutConfig(t *testing.T) {
+	t.Setenv("OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS", "5")
+	if got := upstreamResponseHeaderTimeout(); got != 5*time.Second {
+		t.Errorf("env override: got %v, want 5s", got)
+	}
+	t.Setenv("OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS", "0")
+	if got := upstreamResponseHeaderTimeout(); got != 0 {
+		t.Errorf("env 0 disables header timeout: got %v", got)
+	}
+	t.Setenv("OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS", "bogus")
+	if got := upstreamResponseHeaderTimeout(); got != 120*time.Second {
+		t.Errorf("invalid falls back to default 120s: got %v", got)
+	}
+	t.Setenv("OPENCODE2API_RESPONSE_HEADER_TIMEOUT_SECS", "")
+	if got := upstreamResponseHeaderTimeout(); got != 120*time.Second {
+		t.Errorf("unset default 120s: got %v", got)
+	}
+	tr, ok := httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("httpClient.Transport type = %T, want *http.Transport", httpClient.Transport)
+	}
+	if tr.ResponseHeaderTimeout != upstreamResponseHeaderTimeout() {
+		t.Errorf("httpClient ResponseHeaderTimeout %v must track upstreamResponseHeaderTimeout()",
+			tr.ResponseHeaderTimeout)
 	}
 }

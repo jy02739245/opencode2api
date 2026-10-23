@@ -169,9 +169,8 @@ func claudeCountTokensHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	auth := extractUpstreamAuth(r)
 	defer r.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10*1024*1024))
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+	body, ok := readRequestBody(w, r, maxRequestBodyBytes())
+	if !ok {
 		return
 	}
 
